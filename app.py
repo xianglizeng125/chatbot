@@ -187,16 +187,19 @@ if submitted and user_input:
         sentiment_pred = predict_sentiment(corrected_input)
         is_negative = sentiment_pred == 0
 
+    show_mood = any(word in raw_input for word in ["love", "like", "want", "enjoy"]) and not is_negative
+    sentiment_note = "😊 Awesome! You're in a good mood! " if show_mood else "😕 No worries! I got you. " if is_negative else ""
+
     st.session_state.chat_history.append(("You", user_input))
 
     if matched_menu:
         if is_negative:
-            response = f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Let's try something else?"
+            response = sentiment_note + f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Let's try something else?"
         elif matched_menu in menu_stats["menu"].values:
             row = menu_stats[menu_stats["menu"] == matched_menu].iloc[0]
-            response = f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended! 🎉"
+            response = sentiment_note + f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended! 🎉"
         else:
-            response = f"✅ Great! **{matched_menu}** is a tasty choice!"
+            response = sentiment_note + f"✅ Great! **{matched_menu}** is a tasty choice!"
     elif category:
         suggestions = menu_stats[menu_stats["menu"].isin(menu_actual)].copy()
         if is_negative:
@@ -208,13 +211,13 @@ if submitted and user_input:
             response = "🙁 Sorry, I couldn't find any matching menu!"
         else:
             top = suggestions.sort_values("score", ascending=False).iloc[0]
-            response = f"🍽️ How about trying **{top['menu']}**?"
+            response = sentiment_note + f"🍽️ How about trying **{top['menu']}**?"
     else:
         if is_negative:
-            response = "Got it! You don't like that. Let me think of something else next time."
+            response = sentiment_note + "Got it! You don't like that. Let me think of something else next time."
         else:
             top = menu_stats.sort_values("score", ascending=False).iloc[0]
-            response = f"🤔 Not sure what you meant, but maybe try **{top['menu']}**?"
+            response = sentiment_note + f"🤔 Not sure what you meant, but maybe try **{top['menu']}**?"
 
     st.session_state.chat_history.append(("Bot", response))
 
