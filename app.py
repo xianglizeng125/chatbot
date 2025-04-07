@@ -194,30 +194,34 @@ if submitted and user_input:
 
     if matched_menu:
         if is_negative:
-            response = sentiment_note + f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Let's try something else?"
+            recommendations = menu_stats[menu_stats["menu"] != matched_menu].sort_values("score", ascending=False).head(3)
+            response = sentiment_note + f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Try these instead:\n"
         elif matched_menu in menu_stats["menu"].values:
             row = menu_stats[menu_stats["menu"] == matched_menu].iloc[0]
             response = sentiment_note + f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended! 🎉"
+            recommendations = None
         else:
+            recommendations = menu_stats.sort_values("score", ascending=False).head(3)
             response = sentiment_note + f"✅ Great! **{matched_menu}** is a tasty choice!"
     elif category:
         suggestions = menu_stats[menu_stats["menu"].isin(menu_actual)].copy()
         if is_negative:
             suggestions = suggestions[~suggestions["menu"].isin(menu_categories.get(category, []))]
+            response = sentiment_note + f"🙅 Avoiding **{category}** dishes? Try these instead:\n"
         else:
             suggestions = suggestions[suggestions["menu"].isin(menu_categories.get(category, []))]
+            response = sentiment_note + f"🔥 Here are top picks in **{category}** category:\n"
 
-        if suggestions.empty:
+        recommendations = suggestions.sort_values("score", ascending=False).head(3) if not suggestions.empty else None
+        if recommendations is None:
             response = "🙁 Sorry, I couldn't find any matching menu!"
-        else:
-            top = suggestions.sort_values("score", ascending=False).iloc[0]
-            response = sentiment_note + f"🍽️ How about trying **{top['menu']}**?"
     else:
-        if is_negative:
-            response = sentiment_note + "Got it! You don't like that. Let me think of something else next time."
-        else:
-            top = menu_stats.sort_values("score", ascending=False).iloc[0]
-            response = sentiment_note + f"🤔 Not sure what you meant, but maybe try **{top['menu']}**?"
+        recommendations = menu_stats.sort_values("score", ascending=False).head(3)
+        response = sentiment_note + "🤔 Not sure what you meant, but maybe try one of these:\n"
+
+    if recommendations is not None:
+        for idx, row in recommendations.iterrows():
+            response += f"{idx+1}. **{row['menu'].title()}** — Sentiment: {row['avg_sentiment']:.2f} — {int(row['count'])} reviews\n"
 
     st.session_state.chat_history.append(("Bot", response))
 
