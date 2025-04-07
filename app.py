@@ -7,7 +7,8 @@ import streamlit as st
 from PIL import Image
 from textblob import TextBlob
 from sklearn.preprocessing import MinMaxScaler
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, TFDistilBertModel
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 
 # ====== CONFIG ======
@@ -16,10 +17,6 @@ MAX_LEN = 100
 GOOGLE_DRIVE_ZIP_ID = "1fKrPXGWGMn0mkwLPGOAgEH7f9_efR1Sd"
 ZIP_PATH = "nlp_assets.zip"
 EXTRACT_PATH = "nlp_assets"
-
-# ====== DEFINE CUSTOM FUNCTION USED IN MODEL ======
-def extract_bert_embeddings(inputs):
-    return inputs[:, 0, :]
 
 # ====== DOWNLOAD & LOAD MODEL/TOKENIZER ======
 @st.cache_resource
@@ -33,32 +30,23 @@ def download_and_load_assets():
                     zip_ref.extractall(EXTRACT_PATH)
             except Exception as e:
                 st.error(f"❌ Error downloading or extracting ZIP: {e}")
-                return None, None
+                return None, None, None
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(os.path.join(EXTRACT_PATH, "tokenizer_distilbert"), local_files_only=True)
-        model = load_model(
-            os.path.join(EXTRACT_PATH, "model.keras"),
-            custom_objects={"extract_bert_embeddings": extract_bert_embeddings}
-        )
+        bert_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+        bert_model.trainable = False
+        model = load_model(os.path.join(EXTRACT_PATH, "model.keras"), compile=False)
         st.success("✅ Model and tokenizer loaded successfully!")
     except Exception as e:
         st.error(f"❌ Error loading tokenizer/model: {e}")
-        return None, None
+        return None, None, None
 
-    return tokenizer, model
+    return tokenizer, bert_model, model
 
-tokenizer, sentiment_model = download_and_load_assets()
+tokenizer, bert_model, sentiment_model = download_and_load_assets()
 
-# ====== SIDEBAR ======
-with st.sidebar:
-    if os.path.exists("gostop.jpeg"):
-        st.image(Image.open("gostop.jpeg"), use_container_width=True)
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.chat_history = []
-        st.rerun()
-
-# ====== MENU & ALIASES ======
+# ====== MENU & DATA ======
 menu_actual = [
     "soondubu jjigae", "prawn soondubu jjigae", "kimchi jjigae", "tofu jjigae",
     "samgyeopsal", "spicy samgyeopsal", "woo samgyup", "spicy woo samgyup",
@@ -67,10 +55,8 @@ menu_actual = [
 ]
 
 menu_aliases = {
-    "soondubu": "soondubu jjigae",
-    "suundobu": "soondubu jjigae",
-    "beef soondubu": "beef soondubu jjigae",
-    "pork soondubu": "pork soondubu jjigae",
+    "soondubu": "soondubu jjigae", "suundobu": "soondubu jjigae",
+    "beef soondubu": "beef soondubu jjigae", "pork soondubu": "pork soondubu jjigae",
     "soondubu jigae": "soondubu jjigae"
 }
 
@@ -91,16 +77,11 @@ menu_categories = {
     "tofu_based": ["tofu jjigae", "soondubu jjigae", "beef soondubu jjigae", "pork soondubu jjigae"]
 }
 
-# ====== DATA LOADER ======
 @st.cache_data
 def load_data():
-    if not os.path.exists("review_sentiment.csv"):
-        st.error("❌ 'review_sentiment.csv' not found.")
-        return None
-
     df = pd.read_csv("review_sentiment.csv")
-    df["menu"] = df["menu"].str.lower().replace(menu_aliases)
     df = df[df["sentiment"] == "positive"]
+    df["menu"] = df["menu"].str.lower().replace(menu_aliases)
 
     menu_stats = df.groupby("menu").agg(
         count=("menu", "count"),
@@ -108,9 +89,7 @@ def load_data():
     ).reset_index()
 
     scaler = MinMaxScaler()
-    menu_stats[["count_norm", "sentiment_norm"]] = scaler.fit_transform(
-        menu_stats[["count", "avg_sentiment"]]
-    )
+    menu_stats[["count_norm", "sentiment_norm"]] = scaler.fit_transform(menu_stats[["count", "avg_sentiment"]])
     menu_stats["score"] = (menu_stats["count_norm"] + menu_stats["sentiment_norm"]) / 2
     return menu_stats
 
@@ -137,19 +116,21 @@ def fuzzy_match_menu(text, menu_list):
     return None
 
 def detect_negative_rule(text):
-    negative_keywords = ["don't", "not", "dislike", "too", "hate", "worst", "bad"]
-    return any(neg in text for neg in negative_keywords)
+    return any(neg in text for neg in ["don't", "not", "dislike", "too", "hate", "worst", "bad"])
 
 def is_category_only_input(text):
-    words = text.lower().split()
-    return all(word in keyword_aliases for word in words)
+    return all(word in keyword_aliases for word in text.lower().split())
 
 def predict_sentiment(text):
     inputs = tokenizer(text, return_tensors="tf", truncation=True, padding="max_length", max_length=MAX_LEN)
-    preds = sentiment_model.predict(inputs['input_ids'], verbose=0)
+    bert_output = bert_model(
+        input_ids=inputs["input_ids"],
+        attention_mask=inputs["attention_mask"]
+    ).last_hidden_state
+    preds = sentiment_model.predict(bert_output, verbose=0)
     return int(preds[0][0] > 0.5)
 
-# ====== CHATBOT UI ======
+# ====== UI ======
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -169,62 +150,50 @@ if submitted and user_input:
     category = detect_category(raw_input)
     is_category_input = is_category_only_input(corrected_lower)
     explicit_negative = detect_negative_rule(raw_input)
-    is_negative = False
-    sentiment_pred = "SKIPPED"
 
-    if matched_menu and not explicit_negative:
-        is_negative = False
-    elif matched_menu and explicit_negative:
-        is_negative = True
-    elif matched_menu:
-        sentiment_pred = predict_sentiment(corrected_input)
-        is_negative = sentiment_pred == 0
-    elif category and not explicit_negative and is_category_input:
-        is_negative = False
-    elif category and explicit_negative:
-        is_negative = True
-    else:
-        sentiment_pred = predict_sentiment(corrected_input)
-        is_negative = sentiment_pred == 0
-
+    sentiment_pred = predict_sentiment(corrected_input)
+    is_negative = sentiment_pred == 0 if matched_menu or category else False
     show_mood = any(word in raw_input for word in ["love", "like", "want", "enjoy"]) and not is_negative
-    sentiment_note = "😊 Awesome! You're in a good mood! " if show_mood else "😕 No worries! I got you. " if is_negative else ""
 
-    st.session_state.chat_history.append(("You", user_input))
+    response = ""
+    if show_mood:
+        response += "😊 You're in a great mood!\n\n"
+    elif is_negative:
+        response += "😕 Got it. Let's avoid that.\n\n"
 
     if matched_menu:
         if is_negative:
-            recommendations = menu_stats[menu_stats["menu"] != matched_menu].sort_values("score", ascending=False).head(3)
-            response = sentiment_note + f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Try these instead:\n"
-        elif matched_menu in menu_stats["menu"].values:
-            row = menu_stats[menu_stats["menu"] == matched_menu].iloc[0]
-            response = sentiment_note + f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended! 🎉"
-            recommendations = None
+            response += f"❌ You don't like **{matched_menu}**. Let's try something else."
         else:
-            recommendations = menu_stats.sort_values("score", ascending=False).head(3)
-            response = sentiment_note + f"✅ Great! **{matched_menu}** is a tasty choice!"
+            row = menu_stats[menu_stats["menu"] == matched_menu].iloc[0]
+            response += f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended!"
     elif category:
-        suggestions = menu_stats[menu_stats["menu"].isin(menu_actual)].copy()
+        suggestions = menu_stats.copy()
         if is_negative:
             suggestions = suggestions[~suggestions["menu"].isin(menu_categories.get(category, []))]
-            response = sentiment_note + f"🙅 Avoiding **{category}** dishes? Try these instead:\n"
         else:
             suggestions = suggestions[suggestions["menu"].isin(menu_categories.get(category, []))]
-            response = sentiment_note + f"🔥 Here are top picks in **{category}** category:\n"
 
-        recommendations = suggestions.sort_values("score", ascending=False).head(3) if not suggestions.empty else None
-        if recommendations is None:
-            response = "🙁 Sorry, I couldn't find any matching menu!"
+        if suggestions.empty:
+            response += "🙁 Sorry, no menu found for that."
+        else:
+            top = suggestions.sort_values("score", ascending=False).head(3)
+            response += f"🔥 Here are top picks in **{category}** category:<br><table><tr><th>Rank</th><th>Menu</th><th>Sentiment</th><th>Reviews</th></tr>"
+            for i, (_, row) in enumerate(top.iterrows(), 1):
+                response += f"<tr><td>{i}</td><td>{row['menu'].title()}</td><td>{row['avg_sentiment']:.2f}</td><td>{int(row['count'])}</td></tr>"
+            response += "</table>"
     else:
-        recommendations = menu_stats.sort_values("score", ascending=False).head(3)
-        response = sentiment_note + "🤔 Not sure what you meant, but maybe try one of these:\n"
+        top = menu_stats.sort_values("score", ascending=False).head(3)
+        response += "🤔 Not sure what you meant. Here's our top 3 picks:<br><table><tr><th>Rank</th><th>Menu</th><th>Sentiment</th><th>Reviews</th></tr>"
+        for i, (_, row) in enumerate(top.iterrows(), 1):
+            response += f"<tr><td>{i}</td><td>{row['menu'].title()}</td><td>{row['avg_sentiment']:.2f}</td><td>{int(row['count'])}</td></tr>"
+        response += "</table>"
 
-    if recommendations is not None:
-        for idx, row in recommendations.iterrows():
-            response += f"{idx+1}. **{row['menu'].title()}** — Sentiment: {row['avg_sentiment']:.2f} — {int(row['count'])} reviews\n"
-
+    st.session_state.chat_history.append(("You", user_input))
     st.session_state.chat_history.append(("Bot", response))
 
-# ====== DISPLAY CHAT ======
 for sender, message in st.session_state.chat_history:
-    st.markdown(f"**{sender}:** {message}")
+    if sender == "Bot":
+        st.markdown(f"**{sender}:** {message}", unsafe_allow_html=True)
+    else:
+        st.markdown(f"**{sender}:** {message}")
