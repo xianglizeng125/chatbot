@@ -19,7 +19,7 @@ EXTRACT_PATH = "nlp_assets"
 
 # ====== DEFINE CUSTOM FUNCTION USED IN MODEL ======
 def extract_bert_embeddings(inputs):
-    return inputs[:, 0, :]  # Adjust this line based on actual function logic
+    return inputs[:, 0, :]
 
 # ====== DOWNLOAD & LOAD MODEL/TOKENIZER ======
 @st.cache_resource
@@ -192,6 +192,9 @@ if submitted and user_input:
     if matched_menu:
         if is_negative:
             response = f"❌ Oh no! Sounds like you don't like **{matched_menu}**. Let's try something else?"
+        elif matched_menu in menu_stats["menu"].values:
+            row = menu_stats[menu_stats["menu"] == matched_menu].iloc[0]
+            response = f"🍽️ **{matched_menu.title()}** has **{row['count']} reviews** with average sentiment **{row['avg_sentiment']:.2f}**. Recommended! 🎉"
         else:
             response = f"✅ Great! **{matched_menu}** is a tasty choice!"
     elif category:
