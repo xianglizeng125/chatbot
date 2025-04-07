@@ -1,0 +1,19 @@
+<<<<<<< HEAD
+streamlit
+pandas
+scikit-learn
+numpy
+Pillow
+tensorflow==2.19.0
+transformers==4.36.2
+textblob
+=======
+streamlit
+pandas
+scikit-learn
+numpy
+Pillow
+tensorflow==2.19.0
+transformers==4.36.2
+textblob
+>>>>>>> 960ac4c (Push model files with Git LFS)
