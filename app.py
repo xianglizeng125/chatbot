@@ -13,7 +13,7 @@ from tensorflow.keras.models import load_model
 # ====== CONFIG ======
 st.set_page_config(page_title="GoStop BBQ Recommender", layout="centered")
 MAX_LEN = 100
-GOOGLE_DRIVE_ZIP_ID = "1VYpTx-hS0V-MXS0Qwox-XFWwbQnD2aNR"  # ← ZIP terbaru kamu
+GOOGLE_DRIVE_ZIP_ID = "1xLqHYbxck-3fthBaD9ujj5ZYMui5SmnL"  # 🔁 ID ZIP BARU
 ZIP_PATH = "nlp_assets.zip"
 EXTRACT_PATH = "nlp_assets"
 
