@@ -13,7 +13,7 @@ from tensorflow.keras.models import load_model
 # ====== CONFIG ======
 st.set_page_config(page_title="GoStop BBQ Recommender", layout="centered")
 MAX_LEN = 100
-GOOGLE_DRIVE_ZIP_ID = "1xLqHYbxck-3fthBaD9ujj5ZYMui5SmnL"  # 🔁 ID ZIP BARU
+GOOGLE_DRIVE_ZIP_ID = "1xLqHYbxck-3fthBaD9ujj5ZYMui5SmnL"
 ZIP_PATH = "nlp_assets.zip"
 EXTRACT_PATH = "nlp_assets"
 
@@ -21,22 +21,22 @@ EXTRACT_PATH = "nlp_assets"
 @st.cache_resource
 def download_and_load_assets():
     if not os.path.exists(EXTRACT_PATH):
-        with st.spinner("📥 Downloading model & tokenizer..."):
+        with st.spinner("\ud83d\udcc5 Downloading model & tokenizer..."):
             url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_ZIP_ID}"
             try:
                 gdown.download(url, ZIP_PATH, quiet=False)
                 with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
                     zip_ref.extractall(EXTRACT_PATH)
             except Exception as e:
-                st.error(f"❌ Error downloading or extracting ZIP: {e}")
+                st.error(f"\u274c Error downloading or extracting ZIP: {e}")
                 return None, None
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(os.path.join(EXTRACT_PATH, "tokenizer_distilbert"), local_files_only=True)
         model = load_model(os.path.join(EXTRACT_PATH, "model.keras"))
-        st.success("✅ Model and tokenizer loaded successfully!")
+        st.success("\u2705 Model and tokenizer loaded successfully!")
     except Exception as e:
-        st.error(f"❌ Error loading tokenizer/model: {e}")
+        st.error(f"\u274c Error loading tokenizer/model: {e}")
         return None, None
 
     return tokenizer, model
