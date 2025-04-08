@@ -1,3 +1,4 @@
+
 import os
 import zipfile
 import gdown
@@ -44,7 +45,6 @@ def download_and_load_assets():
 
 tokenizer, bert_model, sentiment_model = download_and_load_assets()
 
-# ✅ Perbaikan penting agar tidak error jika gagal load
 if not all([tokenizer, bert_model, sentiment_model]):
     st.error("❌ Failed to load model/tokenizer. App will stop.")
     st.stop()
@@ -88,7 +88,6 @@ menu_categories = {
     "tofu_based": ["tofu jjigae", "soondubu jjigae", "beef soondubu jjigae", "pork soondubu jjigae"]
 }
 
-# ========== LOAD DATA ==========
 @st.cache_data
 def load_data():
     df = pd.read_csv("review_sentiment.csv")
@@ -107,7 +106,6 @@ def load_data():
 
 menu_stats = load_data()
 
-# ========== UTILS ==========
 def correct_spelling(text):
     return str(TextBlob(str(text)).correct())
 
@@ -138,7 +136,7 @@ def predict_sentiment(text):
     preds = sentiment_model.predict(bert_output, verbose=0)
     return int(preds[0][0] > 0.5)
 
-# ========== CHATBOT ==========
+# ========== CHAT ==========
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
