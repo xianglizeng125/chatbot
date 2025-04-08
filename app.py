@@ -38,11 +38,14 @@ def download_and_load_assets():
         )
         sentiment_model = load_model(os.path.join(EXTRACT_PATH, "model.keras"))
         return tokenizer, bert_model, sentiment_model
-    except Exception as e:
-        st.error(f"❌ Error loading assets: {e}")
-        return None, None, None
+    except:
+        return None, None, None  # ➤ quietly fail
 
 tokenizer, bert_model, sentiment_model = download_and_load_assets()
+
+# ✅ Silent check (no error shown to user)
+if not all([tokenizer, bert_model, sentiment_model]):
+    st.stop()
 
 # ========== SIDEBAR ==========
 with st.sidebar:
