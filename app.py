@@ -17,7 +17,7 @@ GOOGLE_DRIVE_ZIP_ID = "13kZQFNNE8BI9Ix519l6fZ9lxIpKr4m9J"
 ZIP_PATH = "nlp_assets.zip"
 EXTRACT_PATH = "nlp_assets"
 
-# ====== DOWNLOAD & LOAD MODEL/TOKENIZER/BERT ======
+# ====== LOAD MODEL/TOKENIZER ======
 @st.cache_resource
 def download_and_load_assets():
     if not os.path.exists(EXTRACT_PATH):
@@ -51,10 +51,8 @@ menu_actual = [
 ]
 
 menu_aliases = {
-    "soondubu": "soondubu jjigae",
-    "suundobu": "soondubu jjigae",
-    "beef soondubu": "beef soondubu jjigae",
-    "pork soondubu": "pork soondubu jjigae",
+    "soondubu": "soondubu jjigae", "suundobu": "soondubu jjigae",
+    "beef soondubu": "beef soondubu jjigae", "pork soondubu": "pork soondubu jjigae",
     "soondubu jigae": "soondubu jjigae"
 }
 
@@ -75,7 +73,7 @@ menu_categories = {
     "tofu_based": ["tofu jjigae", "soondubu jjigae", "beef soondubu jjigae", "pork soondubu jjigae"]
 }
 
-# ====== LOAD SENTIMENT DATA ======
+# ====== DATA ======
 @st.cache_data
 def load_data():
     df = pd.read_csv("review_sentiment.csv")
@@ -96,34 +94,40 @@ menu_stats = load_data()
 
 # ====== UTILS ======
 def correct_spelling(text):
-    return str(TextBlob(text).correct())
+    return str(TextBlob(str(text)).correct())
 
 def detect_category(text):
+    text = str(text).lower()
     for keyword, category in keyword_aliases.items():
-        if keyword in text.lower():
+        if keyword in text:
             return category
     return None
 
 def fuzzy_match_menu(text, menu_list):
-    text = text.lower()
+    text = str(text).lower()
     for menu in menu_list:
         if all(word in text for word in menu.split()):
             return menu
     return None
 
 def detect_negative_rule(text):
-    return any(neg in text.lower() for neg in ["don't", "not", "dislike", "too", "hate", "worst", "bad"])
+    text = str(text).lower()
+    return any(neg in text for neg in ["don't", "not", "dislike", "too", "hate", "worst", "bad"])
 
 def is_category_only_input(text):
-    return all(word in keyword_aliases for word in text.lower().split())
+    text = str(text).lower()
+    return all(word in keyword_aliases for word in text.split())
 
 def predict_sentiment(text):
+    text = str(text)
+    if not text.strip():
+        return 0
     inputs = tokenizer(text, return_tensors="tf", truncation=True, padding="max_length", max_length=MAX_LEN)
     bert_output = bert_model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).last_hidden_state
     preds = sentiment_model.predict(bert_output, verbose=0)
     return int(preds[0][0] > 0.5)
 
-# ====== CHAT UI ======
+# ====== CHATBOT UI ======
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -131,7 +135,7 @@ st.title("👩‍🍳 GoStop Korean BBQ Menu Recommender")
 st.markdown("Ask something like **'recommend me non-spicy food'** or **'how about odeng?'**")
 
 with st.form("chat_form", clear_on_submit=True):
-    user_input = st.text_input("You:", placeholder="Type your request here...")
+    user_input = str(st.text_input("You:", placeholder="Type your request here..."))
     submitted = st.form_submit_button("Send")
 
 if submitted and user_input:
@@ -189,6 +193,7 @@ if submitted and user_input:
     st.session_state.chat_history.append(("You", user_input))
     st.session_state.chat_history.append(("Bot", response))
 
+# ====== SHOW CHAT ======
 for sender, msg in st.session_state.chat_history:
     if sender == "Bot":
         st.markdown(msg, unsafe_allow_html=True)
