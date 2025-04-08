@@ -38,14 +38,11 @@ def download_and_load_assets():
         )
         sentiment_model = load_model(os.path.join(EXTRACT_PATH, "model.keras"))
         return tokenizer, bert_model, sentiment_model
-    except:
-        return None, None, None  # ➤ quietly fail
+    except Exception as e:
+        print(f"[INFO] Asset loading failed temporarily (usually on first load): {e}")
+        return None, None, None
 
 tokenizer, bert_model, sentiment_model = download_and_load_assets()
-
-# ✅ Silent check (no error shown to user)
-if not all([tokenizer, bert_model, sentiment_model]):
-    st.stop()
 
 # ========== SIDEBAR ==========
 with st.sidebar:
