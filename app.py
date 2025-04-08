@@ -1,4 +1,3 @@
-
 import os
 import zipfile
 import gdown
@@ -8,17 +7,17 @@ import numpy as np
 from PIL import Image
 from textblob import TextBlob
 from sklearn.preprocessing import MinMaxScaler
-from transformers import AutoTokenizer, TFDistilBertModel
+from transformers import AutoTokenizer
 from tensorflow.keras.models import load_model
 
-# ========== CONFIG ==========
+# ========== CONFIG ========== #
 st.set_page_config(page_title="GoStop BBQ Recommender", layout="centered")
 MAX_LEN = 100
 GOOGLE_DRIVE_ZIP_ID = "13kZQFNNE8BI9Ix519l6fZ9lxIpKr4m9J"
 ZIP_PATH = "nlp_assets.zip"
 EXTRACT_PATH = "nlp_assets"
 
-# ========== DOWNLOAD & LOAD ==========
+# ========== DOWNLOAD & LOAD ========== #
 @st.cache_resource
 def download_and_load_assets():
     if not os.path.exists(EXTRACT_PATH):
@@ -27,29 +26,23 @@ def download_and_load_assets():
             gdown.download(url, ZIP_PATH, quiet=False)
             with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
                 zip_ref.extractall(EXTRACT_PATH)
-
     try:
         tokenizer = AutoTokenizer.from_pretrained(
             os.path.join(EXTRACT_PATH, "tokenizer_distilbert"),
             local_files_only=True
         )
-        bert_model = TFDistilBertModel.from_pretrained(
-            os.path.join(EXTRACT_PATH, "bert_model"),
-            local_files_only=True
-        )
-        sentiment_model = load_model(os.path.join(EXTRACT_PATH, "model.keras"))
-        return tokenizer, bert_model, sentiment_model
+        model = load_model(os.path.join(EXTRACT_PATH, "model.keras"))
+        return tokenizer, model
     except Exception as e:
         st.error(f"❌ Error loading assets: {e}")
-        return None, None, None
+        return None, None
 
-tokenizer, bert_model, sentiment_model = download_and_load_assets()
-
-if not all([tokenizer, bert_model, sentiment_model]):
+tokenizer, sentiment_model = download_and_load_assets()
+if not all([tokenizer, sentiment_model]):
     st.error("❌ Failed to load model/tokenizer. App will stop.")
     st.stop()
 
-# ========== SIDEBAR ==========
+# ========== SIDEBAR ========== #
 with st.sidebar:
     if os.path.exists("gostop.jpeg"):
         st.image(Image.open("gostop.jpeg"), use_container_width=True)
@@ -57,7 +50,7 @@ with st.sidebar:
         st.session_state.chat_history = []
         st.rerun()
 
-# ========== MENU ==========
+# ========== MENU DATA ========== #
 menu_actual = [
     "soondubu jjigae", "prawn soondubu jjigae", "kimchi jjigae", "tofu jjigae",
     "samgyeopsal", "spicy samgyeopsal", "woo samgyup", "spicy woo samgyup",
@@ -88,6 +81,7 @@ menu_categories = {
     "tofu_based": ["tofu jjigae", "soondubu jjigae", "beef soondubu jjigae", "pork soondubu jjigae"]
 }
 
+# ========== LOAD DATA ========== #
 @st.cache_data
 def load_data():
     df = pd.read_csv("review_sentiment.csv")
@@ -106,6 +100,7 @@ def load_data():
 
 menu_stats = load_data()
 
+# ========== UTILS ========== #
 def correct_spelling(text):
     return str(TextBlob(str(text)).correct())
 
@@ -132,11 +127,10 @@ def is_category_only_input(text):
 
 def predict_sentiment(text):
     inputs = tokenizer(text, return_tensors="tf", truncation=True, padding="max_length", max_length=MAX_LEN)
-    bert_output = bert_model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).last_hidden_state
-    preds = sentiment_model.predict(bert_output, verbose=0)
+    preds = sentiment_model.predict([inputs["input_ids"], inputs["attention_mask"]], verbose=0)
     return int(preds[0][0] > 0.5)
 
-# ========== CHAT ==========
+# ========== CHAT UI ========== #
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
